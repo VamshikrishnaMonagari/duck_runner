@@ -111,6 +111,7 @@ export function start(canvas) {
   let jumping = false, jvy = 0, py = 0;
   let sliding = false, slT = 0;
   let magnetOn = false, magnetT = 0, shieldOn = false, boostOn = false, boostT = 0;
+  let pendingKeyDir = null;
   let dObs = 0, nObs = 22, dPow = 0, nPow = 40 + Math.random() * 40;
   const wasAt = duck.position.clone();
   const chunks = [];
@@ -343,7 +344,7 @@ export function start(canvas) {
   const shell = createShell(input, {
     fields: { score: { label: '⭐' }, dist: { label: '🏃' }, coins: { label: '💰' } },
     screens: {
-      start: { title: 'DUCK RUN', hint: 'Temple Escape\n\nSwipe ← → to dodge\nSwipe ↑ jump · ↓ slide', action: 'TAP TO PLAY' },
+      start: { title: 'DUCK RUN', hint: 'Temple Escape\n\nSwipe or Arrow Keys / WASD\n← → dodge · ↑ / Space jump · ↓ slide', action: 'TAP TO PLAY' },
       pause: { title: 'PAUSED', action: '▶ RESUME' },
       over:  { title: 'GAME OVER', action: 'PLAY AGAIN' },
     },
@@ -355,6 +356,28 @@ export function start(canvas) {
   });
   shell.show('start');
   shell.set('score', '0'); shell.set('dist', '0m'); shell.set('coins', '0');
+
+  /* ── keyboard (web / desktop) ── */
+  if (typeof window !== 'undefined') {
+    const keyMap = {
+      ArrowLeft: 'left', a: 'left', A: 'left',
+      ArrowRight: 'right', d: 'right', D: 'right',
+      ArrowUp: 'up', w: 'up', W: 'up', ' ': 'up', Spacebar: 'up',
+      ArrowDown: 'down', s: 'down', S: 'down',
+    };
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      const d = keyMap[e.key];
+      if (!d && e.key !== 'Enter') return;
+      e.preventDefault();
+      // Any control key dismisses a shell screen (start / pause / game-over).
+      if (shell.screen) { if (shell.button) shell.button.click(); return; }
+      if (!started || !alive) return;
+      if (d) pendingKeyDir = d;
+    });
+    // Keep keyboard focus on the game frame after a click, so keys keep working.
+    window.addEventListener('pointerdown', () => { try { window.focus(); } catch (err) {} });
+  }
 
   /* pause / quit buttons */
   const pauseBtn = document.createElement('div');
@@ -412,8 +435,10 @@ export function start(canvas) {
 
       /* input */
       const reg = input.region('track');
-      if (reg.swipe) {
-        const d = reg.swipe.dir;
+      const dir = reg.swipe ? reg.swipe.dir : pendingKeyDir;
+      pendingKeyDir = null;
+      if (dir) {
+        const d = dir;
         if (d === 'left' || d === 'right') {
           lane = Math.max(0, Math.min(2, lane + laneDelta(camera, d)));
           bridge.haptic('light');
